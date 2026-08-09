@@ -92,20 +92,19 @@ export class ProductService {
       orderBy = { stockQuantity: 'desc' };
     }
 
-    // 🎯 Use Prisma $transaction batching to eliminate connection pool race conditions
-    const [products, total] = await prisma.$transaction([
-      prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          category: true,
-          brand: true
-        }
-      }),
-      prisma.product.count({ where })
-    ]);
+    // 🎯 Sequential query execution to eliminate transaction/batching locks
+    const products = await prisma.product.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy,
+      include: {
+        category: true,
+        brand: true
+      }
+    });
+
+    const total = await prisma.product.count({ where });
 
     return {
       products,
@@ -149,23 +148,23 @@ export class ProductService {
   }
 
   static async getFilterMetadata() {
-    const [sockets, ramTypes, formFactors] = await prisma.$transaction([
-      prisma.product.findMany({
-        select: { socket: true },
-        where: { socket: { not: null } },
-        distinct: ['socket']
-      }),
-      prisma.product.findMany({
-        select: { ramType: true },
-        where: { ramType: { not: null } },
-        distinct: ['ramType']
-      }),
-      prisma.product.findMany({
-        select: { formFactor: true },
-        where: { formFactor: { not: null } },
-        distinct: ['formFactor']
-      })
-    ]);
+    const sockets = await prisma.product.findMany({
+      select: { socket: true },
+      where: { socket: { not: null } },
+      distinct: ['socket']
+    });
+
+    const ramTypes = await prisma.product.findMany({
+      select: { ramType: true },
+      where: { ramType: { not: null } },
+      distinct: ['ramType']
+    });
+
+    const formFactors = await prisma.product.findMany({
+      select: { formFactor: true },
+      where: { formFactor: { not: null } },
+      distinct: ['formFactor']
+    });
 
     return {
       sockets: sockets.map((s) => s.socket).filter(Boolean),
