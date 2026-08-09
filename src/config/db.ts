@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { PrismaClient } from '@prisma/client';
 import { seedProducts } from '../scripts/seedFromExcel';
 
@@ -8,7 +11,7 @@ export const prisma = new PrismaClient({
 export const connectDB = async () => {
   try {
     await prisma.$connect();
-    console.log('✅ PostgreSQL Database connected successfully via Prisma');
+    console.log('✅ MySQL Database connected successfully via Prisma');
 
     // Auto-seed if database has 0 products
     const productCount = await prisma.product.count();
@@ -19,6 +22,6 @@ export const connectDB = async () => {
       console.log(`📦 Database loaded with ${productCount} active hardware products.`);
     }
   } catch (error) {
-    console.error('❌ Database connection failed. Please ensure PostgreSQL is running and check DATABASE_URL in .env:', error);
+    console.error('❌ Database connection failed. Please ensure MySQL is running and check DATABASE_URL in .env:', error);
   }
 };
