@@ -92,7 +92,8 @@ export class ProductService {
       orderBy = { stockQuantity: 'desc' };
     }
 
-    const [products, total] = await Promise.all([
+    // 🎯 Use Prisma $transaction batching to eliminate connection pool race conditions
+    const [products, total] = await prisma.$transaction([
       prisma.product.findMany({
         where,
         skip,
@@ -148,7 +149,7 @@ export class ProductService {
   }
 
   static async getFilterMetadata() {
-    const [sockets, ramTypes, formFactors] = await Promise.all([
+    const [sockets, ramTypes, formFactors] = await prisma.$transaction([
       prisma.product.findMany({
         select: { socket: true },
         where: { socket: { not: null } },
