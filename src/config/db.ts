@@ -1,10 +1,22 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// 🔍 Multi-location .env loader for Hostinger / cPanel versioned deployment paths
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import { PrismaClient } from '@prisma/client';
 import { seedProducts } from '../scripts/seedFromExcel';
 
+const dbUrl = process.env.DATABASE_URL;
+
+if (!dbUrl) {
+  console.warn('⚠️ WARNING: process.env.DATABASE_URL is undefined! Check Hostinger Environment Variables or .env file.');
+}
+
 export const prisma = new PrismaClient({
+  datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
 });
 
@@ -22,6 +34,6 @@ export const connectDB = async () => {
       console.log(`📦 Database loaded with ${productCount} active hardware products.`);
     }
   } catch (error) {
-    console.error('❌ Database connection failed. Please ensure MySQL is running and check DATABASE_URL in .env:', error);
+    console.error('❌ Database connection failed. Please ensure MySQL is running and check DATABASE_URL in Hostinger environment / .env:', error);
   }
 };

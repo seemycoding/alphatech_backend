@@ -1,5 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// 🔍 Multi-location .env loader for Hostinger / cPanel versioned deployment paths
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export const ENV = {
   PORT: process.env.PORT || '5001',
