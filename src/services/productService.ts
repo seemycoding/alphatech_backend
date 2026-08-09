@@ -15,21 +15,38 @@ export class ProductService {
     limit?: string;
   }) {
     const page = Math.max(1, parseInt(query.page || '1'));
-    const limit = Math.max(1, parseInt(query.limit || '12'));
+    const limit = Math.max(1, parseInt(query.limit || '50'));
     const skip = (page - 1) * limit;
 
     const where: any = {};
 
-    // 🎯 Direct Category ID Foreign Key Filtering
+    // 🎯 Robust Category Filtering with Slug / Alias Matching
     if (query.categoryId && query.categoryId.toLowerCase() !== 'all') {
       where.categoryId = query.categoryId;
     } else if (query.category && query.category.toLowerCase() !== 'all') {
+      const catSearch = query.category.toLowerCase();
+      let searchTerms: string[] = [catSearch];
+
+      if (catSearch === 'gpu' || catSearch.includes('graphic')) {
+        searchTerms.push('gpu', 'graphics', 'card');
+      } else if (catSearch === 'processor' || catSearch === 'processors' || catSearch === 'cpu') {
+        searchTerms.push('processor', 'processors', 'cpu');
+      } else if (catSearch === 'motherboard' || catSearch === 'motherboards' || catSearch === 'mobo') {
+        searchTerms.push('motherboard', 'motherboards', 'mobo');
+      } else if (catSearch === 'ram' || catSearch.includes('memory')) {
+        searchTerms.push('ram', 'memory');
+      } else if (catSearch === 'storage' || catSearch.includes('ssd') || catSearch.includes('drive')) {
+        searchTerms.push('storage', 'ssd', 'drive', 'nvme');
+      } else if (catSearch === 'psu' || catSearch.includes('power')) {
+        searchTerms.push('psu', 'power', 'supply');
+      }
+
       where.category = {
-        OR: [
-          { id: query.category },
-          { slug: query.category.toLowerCase() },
-          { name: { equals: query.category, mode: 'insensitive' } }
-        ]
+        OR: searchTerms.flatMap((term) => [
+          { id: term },
+          { slug: { contains: term, mode: 'insensitive' } },
+          { name: { contains: term, mode: 'insensitive' } }
+        ])
       };
     }
 
@@ -60,14 +77,20 @@ export class ProductService {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
         { sku: { contains: query.search, mode: 'insensitive' } },
-        { series: { contains: query.search, mode: 'insensitive' } }
+        { description: { contains: query.search, mode: 'insensitive' } },
+        { brand: { name: { contains: query.search, mode: 'insensitive' } } },
+        { category: { name: { contains: query.search, mode: 'insensitive' } } }
       ];
     }
 
     let orderBy: any = { createdAt: 'desc' };
-    if (query.sortBy === 'price-low') orderBy = { price: 'asc' };
-    if (query.sortBy === 'price-high') orderBy = { price: 'desc' };
-    if (query.sortBy === 'name') orderBy = { name: 'asc' };
+    if (query.sortBy === 'price-low') {
+      orderBy = { price: 'asc' };
+    } else if (query.sortBy === 'price-high') {
+      orderBy = { price: 'desc' };
+    } else if (query.sortBy === 'popular') {
+      orderBy = { stockQuantity: 'desc' };
+    }
 
     const [products, total] = await Promise.all([
       prisma.product.findMany({
@@ -75,7 +98,10 @@ export class ProductService {
         skip,
         take: limit,
         orderBy,
-        include: { category: true, brand: true }
+        include: {
+          category: true,
+          brand: true
+        }
       }),
       prisma.product.count({ where })
     ]);
@@ -83,9 +109,9 @@ export class ProductService {
     return {
       products,
       pagination: {
-        total,
         page,
         limit,
+        total,
         totalPages: Math.ceil(total / limit)
       }
     };
@@ -96,49 +122,54 @@ export class ProductService {
       where: {
         OR: [{ id: idOrSlug }, { slug: idOrSlug }, { sku: idOrSlug }]
       },
-      include: { category: true, brand: true }
+      include: {
+        category: true,
+        brand: true
+      }
     });
   }
 
   static async getCategories() {
-    const categories = await prisma.category.findMany({
+    return prisma.category.findMany({
       include: {
         _count: { select: { products: true } }
       },
       orderBy: { name: 'asc' }
     });
-
-    return categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      count: c._count.products
-    }));
   }
 
   static async getBrands() {
-    return prisma.brand.findMany({ orderBy: { name: 'asc' } });
+    return prisma.brand.findMany({
+      include: {
+        _count: { select: { products: true } }
+      },
+      orderBy: { name: 'asc' }
+    });
   }
 
   static async getFilterMetadata() {
-    const [priceStats, socketsRaw, brands] = await Promise.all([
-      prisma.product.aggregate({
-        _min: { price: true },
-        _max: { price: true }
-      }),
+    const [sockets, ramTypes, formFactors] = await Promise.all([
       prisma.product.findMany({
         select: { socket: true },
-        distinct: ['socket'],
-        where: { socket: { not: null } }
+        where: { socket: { not: null } },
+        distinct: ['socket']
       }),
-      prisma.brand.findMany({ select: { id: true, name: true, slug: true } })
+      prisma.product.findMany({
+        select: { ramType: true },
+        where: { ramType: { not: null } },
+        distinct: ['ramType']
+      }),
+      prisma.product.findMany({
+        select: { formFactor: true },
+        where: { formFactor: { not: null } },
+        distinct: ['formFactor']
+      })
     ]);
 
     return {
-      minPrice: priceStats._min.price ? Number(priceStats._min.price) : 0,
-      maxPrice: priceStats._max.price ? Number(priceStats._max.price) : 150000,
-      sockets: socketsRaw.map((s) => s.socket).filter(Boolean),
-      brands
+      sockets: sockets.map((s) => s.socket).filter(Boolean),
+      ramTypes: ramTypes.map((r) => r.ramType).filter(Boolean),
+      formFactors: formFactors.map((f) => f.formFactor).filter(Boolean)
     };
   }
 }

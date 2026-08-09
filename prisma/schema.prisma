@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -88,7 +88,7 @@ model Product {
   stockQuantity      Int             @default(10)
   badge              String?
   imageUrl           String
-  galleryImages      String[]        @default([])
+  galleryImages      Json?
 
   // Category & Brand
   categoryId         String
@@ -111,7 +111,7 @@ model Product {
   // Raw Full Data (Displays 100% of Excel contents)
   description        String?         @db.Text
   specifications     Json
-  features           String[]        @default([])
+  features           Json?
 
   orderItems         OrderItem[]
   wishlistItems      WishlistItem[]
