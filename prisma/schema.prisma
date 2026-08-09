@@ -1,0 +1,195 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum OrderStatus {
+  ORDER_RECEIVED
+  PRECISION_ASSEMBLY
+  STRESS_TESTING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id              String            @id @default(uuid())
+  email           String            @unique
+  passwordHash    String?
+  fullName        String
+  phone           String?
+  company         String?
+  role            Role              @default(CUSTOMER)
+  addresses       Address[]
+  savedBuilds     SavedBuild[]
+  orders          Order[]
+  wishlist        WishlistItem[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model Address {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  isDefault       Boolean           @default(false)
+  fullName        String
+  line1           String
+  line2           String?
+  city            String
+  state           String
+  postalCode      String
+  phone           String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model Category {
+  id              String            @id @default(uuid())
+  name            String            @unique
+  slug            String            @unique
+  products        Product[]
+  createdAt       DateTime          @default(now())
+}
+
+model Brand {
+  id              String            @id @default(uuid())
+  name            String            @unique
+  slug            String            @unique
+  products        Product[]
+  createdAt       DateTime          @default(now())
+}
+
+model Product {
+  id                 String          @id @default(uuid())
+  sku                String          @unique
+  name               String
+  slug               String          @unique
+  price              Decimal         @db.Decimal(10, 2)
+  originalPrice      Decimal?        @db.Decimal(10, 2)
+  inStock            Boolean         @default(true)
+  stockQuantity      Int             @default(10)
+  badge              String?
+  imageUrl           String
+  galleryImages      String[]        @default([])
+
+  // Category & Brand
+  categoryId         String
+  category           Category        @relation(fields: [categoryId], references: [id])
+  brandId            String
+  brand              Brand           @relation(fields: [brandId], references: [id])
+
+  // Key PC Configurator Filtering & Index Fields
+  socket             String?
+  series             String?
+  cores              Int?
+  threads            Int?
+  cache              String?
+  maxTurboFrequency  String?
+  hasIntegratedGpu   Boolean         @default(false)
+  tdp                Int?
+  ramType            String?
+  formFactor         String?
+
+  // Raw Full Data (Displays 100% of Excel contents)
+  description        String?         @db.Text
+  specifications     Json
+  features           String[]        @default([])
+
+  orderItems         OrderItem[]
+  wishlistItems      WishlistItem[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([categoryId, brandId])
+  @@index([socket])
+  @@index([price])
+}
+
+model WishlistItem {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+model SavedBuild {
+  id              String         @id @default(uuid())
+  userId          String?
+  user            User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  tier            String         @default("PERFORMANCE TIER")
+  totalPrice      Decimal        @db.Decimal(10, 2)
+  components      Json
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Order {
+  id              String         @id @default(uuid())
+  orderNumber     String         @unique
+  userId          String?
+  user            User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName    String
+  customerEmail   String
+  customerPhone   String
+  shippingAddress Json
+  shippingMethod  String
+  paymentMethod   String
+  paymentStatus   PaymentStatus  @default(PENDING)
+  orderStatus     OrderStatus    @default(ORDER_RECEIVED)
+  subtotal        Decimal        @db.Decimal(10, 2)
+  shippingCost    Decimal        @db.Decimal(10, 2)
+  tax             Decimal        @db.Decimal(10, 2)
+  totalAmount     Decimal        @db.Decimal(10, 2)
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  items           OrderItem[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model OrderItem {
+  id              String         @id @default(uuid())
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product        @relation(fields: [productId], references: [id])
+  quantity        Int
+  price           Decimal        @db.Decimal(10, 2)
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  email     String
+  otpHash   String
+  type      String   // "FORGOT_PASSWORD", "LOGIN_OTP"
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
+}
