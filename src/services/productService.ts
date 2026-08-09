@@ -20,7 +20,7 @@ export class ProductService {
 
     const where: any = {};
 
-    // 🎯 Robust Category Filtering with Slug / Alias Matching
+    // 🎯 Robust Category Filtering (Fully compatible with MySQL and PostgreSQL)
     if (query.categoryId && query.categoryId.toLowerCase() !== 'all') {
       where.categoryId = query.categoryId;
     } else if (query.category && query.category.toLowerCase() !== 'all') {
@@ -44,8 +44,8 @@ export class ProductService {
       where.category = {
         OR: searchTerms.flatMap((term) => [
           { id: term },
-          { slug: { contains: term, mode: 'insensitive' } },
-          { name: { contains: term, mode: 'insensitive' } }
+          { slug: { contains: term } },
+          { name: { contains: term } }
         ])
       };
     }
@@ -53,14 +53,14 @@ export class ProductService {
     if (query.brand) {
       where.brand = {
         OR: [
-          { slug: { contains: query.brand.toLowerCase(), mode: 'insensitive' } },
-          { name: { contains: query.brand, mode: 'insensitive' } }
+          { slug: { contains: query.brand.toLowerCase() } },
+          { name: { contains: query.brand } }
         ]
       };
     }
 
     if (query.socket) {
-      where.socket = { equals: query.socket, mode: 'insensitive' };
+      where.socket = { equals: query.socket };
     }
 
     if (query.inStock === 'true') {
@@ -75,11 +75,11 @@ export class ProductService {
 
     if (query.search) {
       where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { sku: { contains: query.search, mode: 'insensitive' } },
-        { description: { contains: query.search, mode: 'insensitive' } },
-        { brand: { name: { contains: query.search, mode: 'insensitive' } } },
-        { category: { name: { contains: query.search, mode: 'insensitive' } } }
+        { name: { contains: query.search } },
+        { sku: { contains: query.search } },
+        { description: { contains: query.search } },
+        { brand: { name: { contains: query.search } } },
+        { category: { name: { contains: query.search } } }
       ];
     }
 
