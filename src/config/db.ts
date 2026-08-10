@@ -25,7 +25,7 @@ export const prisma = new PrismaClient({
 
 export const connectDB = async () => {
   try {
-    console.log(`📡 [Prisma] Attempting connection to: ${getMaskedUrl(dbUrl)}`);
+    console.log(`📡 [Prisma] Attempting connection to: ${dbUrl}`);
     await prisma.$connect();
     console.log('✅ MySQL Database connected successfully via Prisma');
 
