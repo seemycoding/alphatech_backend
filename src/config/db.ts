@@ -9,19 +9,23 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 import { PrismaClient } from '@prisma/client';
 import { seedProducts } from '../scripts/seedFromExcel';
 
-const dbUrl = process.env.DATABASE_URL;
+const dbUrl = process.env.DATABASE_URL || '';
 
-if (!dbUrl) {
-  console.warn('⚠️ WARNING: process.env.DATABASE_URL is undefined! Check Hostinger Environment Variables or .env file.');
+function getMaskedUrl(url: string): string {
+  if (!url) return 'UNDEFINED';
+  return url.replace(/(:[^:@]+@)/, ':****@');
 }
+
+console.log(`🔌 [DATABASE DEBUG] Using Connection URL: ${getMaskedUrl(dbUrl)}`);
 
 export const prisma = new PrismaClient({
   datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
+  log: ['error', 'warn']
 });
 
 export const connectDB = async () => {
   try {
+    console.log(`📡 [Prisma] Attempting connection to: ${getMaskedUrl(dbUrl)}`);
     await prisma.$connect();
     console.log('✅ MySQL Database connected successfully via Prisma');
 
@@ -33,7 +37,7 @@ export const connectDB = async () => {
     } else {
       console.log(`📦 Database loaded with ${productCount} active hardware products.`);
     }
-  } catch (error) {
-    console.error('❌ Database connection failed. Please ensure MySQL is running and check DATABASE_URL in Hostinger environment / .env:', error);
+  } catch (error: any) {
+    console.error(`❌ Connection failed for URL [${getMaskedUrl(dbUrl)}]:`, error?.message || error);
   }
 };
