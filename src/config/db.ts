@@ -38,6 +38,6 @@ export const connectDB = async () => {
       console.log(`📦 Database loaded with ${productCount} active hardware products.`);
     }
   } catch (error: any) {
-    console.error(`❌ Connection failed for URL [{dbUrl}]:`, error?.message || error);
+    console.error(`❌ Connection failed for URL [${dbUrl}]:`, error?.message || error);
   }
 };
