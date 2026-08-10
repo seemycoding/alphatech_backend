@@ -15,7 +15,7 @@ export class UserController {
         include: { addresses: true }
       });
 
-      if (!user) return next(new AppError('User not found', 404));
+      if (!user) return next(new AppError('User account not found. Please log in again.', 401));
 
       res.json({
         success: true,
@@ -42,7 +42,7 @@ export class UserController {
       if (!userId) return next(new AppError('Unauthorized', 401));
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) return next(new AppError('User not found', 404));
+      if (!user) return next(new AppError('User account not found. Please log in again.', 401));
 
       const updateData: any = {};
       if (fullName) updateData.fullName = fullName;
@@ -84,6 +84,12 @@ export class UserController {
       const userId = req.user?.id;
       if (!userId) return next(new AppError('Unauthorized', 401));
 
+      // 🎯 Verify user exists in MySQL User table before creating child address record
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return next(new AppError('User account not found in database. Please log in again.', 401));
+      }
+
       const { title, fullName, line1, line2, city, state, postalCode, phone, isDefault } = req.body;
 
       if (isDefault) {
@@ -96,14 +102,14 @@ export class UserController {
       const address = await prisma.address.create({
         data: {
           userId,
-          title: title.toUpperCase(),
-          fullName,
+          title: (title || 'PRIMARY').toUpperCase(),
+          fullName: fullName || user.fullName,
           line1,
           line2,
           city,
           state,
           postalCode,
-          phone,
+          phone: phone || user.phone || '',
           isDefault: !!isDefault
         }
       });

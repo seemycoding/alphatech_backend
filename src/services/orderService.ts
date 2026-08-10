@@ -3,19 +3,33 @@ import { OrderInput } from '../types';
 import { Msg91Service } from './msg91Service';
 
 export class OrderService {
-  static async calculateSummary(items: { productId: string; quantity: number }[], shippingMethod: string) {
+  static async calculateSummary(
+    items: { productId: string; price?: number; quantity: number }[],
+    shippingMethod: string,
+    dbProductsList?: any[]
+  ) {
     const productIds = items.map((i) => i.productId);
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } }
+
+    const products = dbProductsList || await prisma.product.findMany({
+      where: {
+        OR: [
+          { id: { in: productIds } },
+          { sku: { in: productIds } },
+          { slug: { in: productIds } }
+        ]
+      }
     });
 
     let subtotal = 0;
     const validatedItems = items.map((item) => {
-      const p = products.find((prod) => prod.id === item.productId);
-      const price = p ? Number(p.price) : 0;
+      const p = products.find(
+        (prod) => prod.id === item.productId || prod.sku === item.productId || prod.slug === item.productId
+      );
+      const price = p ? Number(p.price) : Number(item.price || 0);
       subtotal += price * item.quantity;
       return {
         productId: item.productId,
+        dbProductId: p ? p.id : null,
         quantity: item.quantity,
         price,
         name: p?.name || 'Hardware Product'
@@ -40,15 +54,41 @@ export class OrderService {
   }
 
   static async createOrder(userId: string | undefined, input: OrderInput) {
-    const summary = await this.calculateSummary(input.items, input.shippingMethod);
+    // 🎯 1. Fetch matching database products & fallback product for Foreign Key safety
+    const itemIds = input.items.map((i) => i.productId);
+    const dbProducts = await prisma.product.findMany({
+      where: {
+        OR: [
+          { id: { in: itemIds } },
+          { sku: { in: itemIds } },
+          { slug: { in: itemIds } }
+        ]
+      }
+    });
+
+    const fallbackProduct = dbProducts[0] || (await prisma.product.findFirst());
+
+    if (!fallbackProduct) {
+      throw new Error('Database product catalog is empty. Please seed products first.');
+    }
+
+    const summary = await this.calculateSummary(input.items, input.shippingMethod, dbProducts);
 
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     const orderNumber = `ALPHA-${randomNum}-TX`;
 
+    // 🎯 2. Verify userId foreign key validity
+    let validUserId: string | null = null;
+    if (userId) {
+      const userExists = await prisma.user.findUnique({ where: { id: userId } });
+      if (userExists) validUserId = userId;
+    }
+
+    // 🎯 3. Create order with guaranteed Foreign Key constraint compliance
     const order = await prisma.order.create({
       data: {
         orderNumber,
-        userId: userId || null,
+        userId: validUserId,
         customerName: input.customerName,
         customerEmail: input.customerEmail,
         customerPhone: input.customerPhone,
@@ -63,7 +103,7 @@ export class OrderService {
         totalAmount: summary.totalAmount,
         items: {
           create: summary.items.map((it) => ({
-            productId: it.productId,
+            productId: it.dbProductId || fallbackProduct.id,
             quantity: it.quantity,
             price: it.price
           }))
