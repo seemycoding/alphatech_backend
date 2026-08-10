@@ -164,6 +164,100 @@ export class AuthController {
   }
 
   /**
+   * Request Forgot Password MSG91 Email OTP
+   */
+  static async requestForgotPasswordOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return next(new AppError('Email address is required', 400));
+      }
+
+      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      if (!user) {
+        return next(new AppError('No account found with this email address.', 404));
+      }
+
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpHash = await bcrypt.hash(otp, 8);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+      await prisma.otpVerification.create({
+        data: {
+          email: email.toLowerCase(),
+          otpHash,
+          type: 'FORGOT_PASSWORD_OTP',
+          expiresAt
+        }
+      });
+
+      await Msg91Service.sendOtpEmail(email, otp, 'Password Reset Security Verification');
+
+      res.json({
+        success: true,
+        message: `6-Digit Password Reset OTP sent to ${email}`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Verify Forgot Password OTP & Reset Password
+   */
+  static async resetPasswordWithOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email, otp, newPassword } = req.body;
+
+      if (!email || !otp || !newPassword) {
+        return next(new AppError('Email, OTP code, and new password are required', 400));
+      }
+
+      const record = await prisma.otpVerification.findFirst({
+        where: {
+          email: email.toLowerCase(),
+          type: 'FORGOT_PASSWORD_OTP',
+          used: false,
+          expiresAt: { gte: new Date() }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      if (!record) {
+        return next(new AppError('Invalid or expired Password Reset OTP code', 400));
+      }
+
+      const isOtpValid = await bcrypt.compare(otp, record.otpHash);
+      if (!isOtpValid) {
+        return next(new AppError('Invalid Password Reset OTP code', 400));
+      }
+
+      await prisma.otpVerification.update({
+        where: { id: record.id },
+        data: { used: true }
+      });
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+
+      const user = await prisma.user.update({
+        where: { email: email.toLowerCase() },
+        data: { passwordHash }
+      });
+
+      // Send Password Reset Success Confirmation Email
+      Msg91Service.sendPasswordResetSuccessEmail(user.email, user.fullName);
+
+      res.json({
+        success: true,
+        message: 'Password updated successfully. Please sign in with your new password.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Send Login / Password Reset MSG91 Email OTP
    */
   static async sendOtp(req: Request, res: Response, next: NextFunction) {

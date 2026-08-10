@@ -1,6 +1,7 @@
 import { prisma } from '../config/db';
 import { OrderInput } from '../types';
 import { Msg91Service } from './msg91Service';
+import { PdfService } from './pdfService';
 
 export class OrderService {
   static async calculateSummary(
@@ -94,7 +95,7 @@ export class OrderService {
         customerPhone: input.customerPhone,
         shippingAddress: input.shippingAddress as any,
         shippingMethod: input.shippingMethod,
-        paymentMethod: input.paymentMethod,
+        paymentMethod: input.paymentMethod || 'RAZORPAY',
         paymentStatus: 'PENDING',
         orderStatus: 'ORDER_RECEIVED',
         subtotal: summary.subtotal,
@@ -112,14 +113,26 @@ export class OrderService {
       include: { items: { include: { product: true } } }
     });
 
-    // Send MSG91 Order Confirmation Email
-    await Msg91Service.sendOrderConfirmationEmail(
-      input.customerEmail,
-      input.customerName,
-      orderNumber,
-      `₹${summary.totalAmount.toLocaleString('en-IN')}`,
-      summary.items
-    );
+    // 🎯 4. Generate PDF Invoice Buffer & Send Email with Attachment
+    try {
+      const pdfBuffer = await PdfService.generateInvoicePdfBuffer(order);
+      await Msg91Service.sendOrderConfirmationEmail(
+        input.customerEmail,
+        input.customerName,
+        orderNumber,
+        `₹${summary.totalAmount.toLocaleString('en-IN')}`,
+        summary.items,
+        pdfBuffer
+      );
+    } catch (pdfErr) {
+      await Msg91Service.sendOrderConfirmationEmail(
+        input.customerEmail,
+        input.customerName,
+        orderNumber,
+        `₹${summary.totalAmount.toLocaleString('en-IN')}`,
+        summary.items
+      );
+    }
 
     return order;
   }

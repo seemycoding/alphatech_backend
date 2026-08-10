@@ -21,19 +21,25 @@ if (ENV.SMTP_USER && ENV.SMTP_PASS) {
 
 export class Msg91Service {
   /**
-   * Universal HTML Email Dispatcher (Supports MSG91 SMTP Transporter + MSG91 REST API)
+   * Universal HTML Email Dispatcher (Supports MSG91 SMTP Transporter + Attachments + REST API)
    */
-  static async sendHtmlEmail(toEmail: string, subject: string, htmlContent: string): Promise<boolean> {
+  static async sendHtmlEmail(
+    toEmail: string,
+    subject: string,
+    htmlContent: string,
+    attachments?: { filename: string; content: Buffer; contentType?: string }[]
+  ): Promise<boolean> {
     const fromAddress = `"${ENV.MSG91_FROM_NAME}" <${ENV.MSG91_FROM_EMAIL}>`;
 
-    // Strategy 1: Attempt MSG91 SMTP Email Delivery
+    // Strategy 1: Attempt MSG91 SMTP Email Delivery with Attachments
     if (smtpTransporter) {
       try {
         const info = await smtpTransporter.sendMail({
           from: fromAddress,
           to: toEmail,
           subject,
-          html: htmlContent
+          html: htmlContent,
+          attachments: attachments || []
         });
         console.log(`📧 [MSG91 SMTP Email Sent] Message ID: ${info.messageId} | To: ${toEmail}`);
         return true;
@@ -45,7 +51,7 @@ export class Msg91Service {
     // Strategy 2: MSG91 v5 REST API Fallback
     if (ENV.MSG91_AUTH_KEY) {
       try {
-        const payload = {
+        const payload: any = {
           to: [{ email: toEmail }],
           from: { email: ENV.MSG91_FROM_EMAIL, name: ENV.MSG91_FROM_NAME },
           domain: ENV.MSG91_DOMAIN,
@@ -72,6 +78,7 @@ export class Msg91Service {
     console.log(`📧 [MOCK EMAIL DISPATCH]`);
     console.log(`To: ${toEmail}`);
     console.log(`Subject: ${subject}`);
+    console.log(`Has Attachment: ${Boolean(attachments && attachments.length > 0)}`);
     console.log(`Body Snippet: ${htmlContent.substring(0, 150)}...`);
     console.log(`======================================================\n`);
     return true;
@@ -124,17 +131,17 @@ export class Msg91Service {
 
         <div style="padding: 30px 0;">
           <h2 style="color: #FFFFFF; font-size: 22px;">Welcome aboard, ${fullName}!</h2>
-          <p style="color: #9A9A9A; font-size: 14px; line-height: 1.6;">Your AlphaaTechh account is verified and ready. You now have access to genuine AMD processors, benchmarked graphics cards, and our live 3D PC Builder.</p>
+          <p style="color: #9A9A9A; font-size: 14px; line-height: 1.6;">Your AlphaaTechh account is verified and ready. You now have access to genuine AMD & Intel processors, benchmarked graphics cards, and our custom PC builder.</p>
           
           <div style="margin: 30px 0;">
             <a href="${ENV.FRONTEND_URL}/build" style="background-color: #E2131F; color: #FFFFFF; text-decoration: none; padding: 14px 28px; border-radius: 4px; font-weight: bold; display: inline-block;">START A CUSTOM BUILD →</a>
           </div>
 
-          <p style="color: #9A9A9A; font-size: 13px;">Need help picking parts? Reply directly to this email or call our Nehru Place store counter.</p>
+          <p style="color: #9A9A9A; font-size: 13px;">Need help picking parts? Reply directly to this email or call our store concierge.</p>
         </div>
 
         <div style="border-top: 1px solid #2A2A2A; padding-top: 20px; text-align: center; color: #616161; font-size: 11px;">
-          <p>© 2026 AlphaaTechh Computers · Genuine Retail Parts & Benchmarked Workstations</p>
+          <p>© 2026 AlphaaTechh Computers · Genuine Retail Parts & Workstations</p>
         </div>
       </div>
     `;
@@ -143,23 +150,24 @@ export class Msg91Service {
   }
 
   /**
-   * 3. Send Order Confirmation Email
+   * 3. Send Order Confirmation Email with PDF Invoice Attachment
    */
   static async sendOrderConfirmationEmail(
     toEmail: string,
     customerName: string,
     orderNumber: string,
     totalAmount: string,
-    items: any[]
+    items: any[],
+    pdfBuffer?: Buffer
   ): Promise<boolean> {
-    const subject = `📦 Order Confirmed #${orderNumber} — AlphaaTechh`;
+    const subject = `📦 Order Confirmed #${orderNumber} — AlphaaTechh (Tax Invoice Attached)`;
 
     const itemsHtml = items
       .map(
         (it) => `
         <tr>
-          <td style="padding: 10px; border-bottom: 1px solid #2A2A2A; color: #FFFFFF; font-size: 13px;">${it.name || 'Hardware Product'}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #2A2A2A; color: #9A9A9A; font-size: 13px; text-align: center;">${it.quantity}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #2A2A2A; color: #FFFFFF; font-size: 13px;">${it.name || it.product?.name || 'Hardware Component'}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #2A2A2A; color: #9A9A9A; font-size: 13px; text-align: center;">${it.quantity || it.qty || 1}</td>
           <td style="padding: 10px; border-bottom: 1px solid #2A2A2A; color: #E2131F; font-size: 13px; text-align: right; font-weight: bold;">₹${Number(it.price || 0).toLocaleString('en-IN')}</td>
         </tr>
       `
@@ -168,14 +176,14 @@ export class Msg91Service {
 
     const htmlContent = `
       <div style="background-color: #000000; color: #FFFFFF; font-family: Arial, sans-serif; padding: 40px; max-width: 650px; margin: 0 auto; border: 1px solid #2A2A2A; border-radius: 8px;">
-        <div style="border-bottom: 2px solid #E2131F; padding-bottom: 20px; text-align: justify;">
+        <div style="border-bottom: 2px solid #E2131F; padding-bottom: 20px;">
           <h1 style="color: #E2131F; font-size: 22px; margin: 0; font-weight: bold;">ALPHAATECHH ORDER CONFIRMATION</h1>
           <p style="color: #9A9A9A; font-size: 12px; margin-top: 5px;">Order Number: <strong style="color: #FFFFFF;">${orderNumber}</strong></p>
         </div>
 
         <div style="padding: 25px 0;">
           <p style="color: #FFFFFF; font-size: 15px;">Hello ${customerName},</p>
-          <p style="color: #9A9A9A; font-size: 14px;">Thank you for your order! Your components have entered our bench-testing pipeline.</p>
+          <p style="color: #9A9A9A; font-size: 14px;">Thank you for your order! Your components have entered our precision assembly line. Your official Tax Invoice PDF is attached to this email.</p>
 
           <table style="width: 100%; border-collapse: collapse; margin: 25px 0; border: 1px solid #2A2A2A;">
             <thead>
@@ -191,11 +199,11 @@ export class Msg91Service {
           </table>
 
           <div style="text-align: right; font-size: 18px; color: #E2131F; font-weight: bold; margin-bottom: 30px;">
-            Total: ${totalAmount}
+            Total Amount: ${totalAmount}
           </div>
 
           <div style="text-align: center;">
-            <a href="${ENV.FRONTEND_URL}/confirmation?orderNumber=${orderNumber}" style="background-color: #E2131F; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; display: inline-block;">TRACK ASSEMBLY STATUS →</a>
+            <a href="${ENV.FRONTEND_URL}/confirmation?orderNumber=${orderNumber}" style="background-color: #E2131F; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; display: inline-block;">TRACK ASSEMBLY TELEMETRY →</a>
           </div>
         </div>
 
@@ -205,11 +213,53 @@ export class Msg91Service {
       </div>
     `;
 
+    const attachments = pdfBuffer
+      ? [
+          {
+            filename: `INVOICE_${orderNumber}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ]
+      : undefined;
+
+    return this.sendHtmlEmail(toEmail, subject, htmlContent, attachments);
+  }
+
+  /**
+   * 4. Send Password Reset Successful Email
+   */
+  static async sendPasswordResetSuccessEmail(toEmail: string, fullName: string): Promise<boolean> {
+    const subject = `🔒 Password Reset Successful — AlphaaTechh Account`;
+
+    const htmlContent = `
+      <div style="background-color: #000000; color: #FFFFFF; font-family: Arial, sans-serif; padding: 40px; max-width: 600px; margin: 0 auto; border: 1px solid #2A2A2A; border-radius: 8px;">
+        <div style="border-bottom: 2px solid #E2131F; padding-bottom: 20px; text-align: center;">
+          <h1 style="color: #E2131F; font-size: 24px; margin: 0; font-weight: bold;">ALPHAATECHH</h1>
+        </div>
+
+        <div style="padding: 30px 0; text-align: center;">
+          <h2 style="color: #FFFFFF; font-size: 20px; margin-bottom: 10px;">Password Reset Confirmed</h2>
+          <p style="color: #9A9A9A; font-size: 14px; line-height: 1.6;">Hello ${fullName}, your account password was successfully updated. You can now sign in using your new password.</p>
+          
+          <div style="margin: 30px 0;">
+            <a href="${ENV.FRONTEND_URL}" style="background-color: #E2131F; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; display: inline-block;">SIGN IN NOW →</a>
+          </div>
+
+          <p style="color: #616161; font-size: 12px;">If you did not perform this action, please contact our support team immediately.</p>
+        </div>
+
+        <div style="border-top: 1px solid #2A2A2A; padding-top: 20px; text-align: center; color: #616161; font-size: 11px;">
+          <p>© 2026 AlphaaTechh Computers · Nehru Place, New Delhi</p>
+        </div>
+      </div>
+    `;
+
     return this.sendHtmlEmail(toEmail, subject, htmlContent);
   }
 
   /**
-   * 4. Send Status / Assembly Update Email
+   * 5. Send Status / Assembly Update Email
    */
   static async sendStatusUpdateEmail(
     toEmail: string,
@@ -230,7 +280,7 @@ export class Msg91Service {
           <p style="color: #9A9A9A; font-size: 14px;">Your order <strong style="color: #FFFFFF;">#${orderNumber}</strong> status has been updated:</p>
           
           <div style="background-color: #121212; border-left: 4px solid #E2131F; padding: 15px; margin: 20px 0;">
-            <span style="color: #E2131F; font-size: 12px; text-transform: uppercase; font-weight: bold; block;">CURRENT STAGE:</span>
+            <span style="color: #E2131F; font-size: 12px; text-transform: uppercase; font-weight: bold; display: block;">CURRENT STAGE:</span>
             <span style="color: #FFFFFF; font-size: 18px; font-weight: bold;">${newStatus.replace(/_/g, ' ')}</span>
           </div>
 

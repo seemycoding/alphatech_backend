@@ -27,15 +27,15 @@ export class PdfService {
       .fillColor('#000000')
       .fontSize(14)
       .font('Helvetica-Bold')
-      .text(`TAX INVOICE — ORDER #${order.orderNumber}`);
+      .text(`TAX INVOICE — ORDER #${order.orderNumber || order.id}`);
 
     doc
       .fontSize(9)
       .font('Helvetica')
       .fillColor('#444444')
-      .text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`)
-      .text(`Payment Status: ${order.paymentStatus}`)
-      .text(`Payment Method: ${order.paymentMethod.toUpperCase()}`);
+      .text(`Date: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}`)
+      .text(`Payment Status: ${order.paymentStatus || 'PAID'}`)
+      .text(`Payment Method: ${(order.paymentMethod || 'ONLINE').toUpperCase()}`);
 
     doc.moveDown(1);
 
@@ -51,11 +51,11 @@ export class PdfService {
       .fontSize(9)
       .font('Helvetica')
       .fillColor('#333333')
-      .text(order.customerName)
-      .text(`${addr.line1 || ''} ${addr.line2 || ''}`)
-      .text(`${addr.city || ''}, ${addr.state || ''} ${addr.postalCode || ''}`)
-      .text(`Phone: ${order.customerPhone}`)
-      .text(`Email: ${order.customerEmail}`);
+      .text(order.customerName || 'Customer')
+      .text(`${addr.line1 || addr.address || ''} ${addr.line2 || ''}`)
+      .text(`${addr.city || ''}, ${addr.state || ''} ${addr.postalCode || addr.pin || ''}`)
+      .text(`Phone: ${order.customerPhone || ''}`)
+      .text(`Email: ${order.customerEmail || ''}`);
 
     doc.moveDown(1.5);
 
@@ -84,9 +84,9 @@ export class PdfService {
         .fontSize(9)
         .font('Helvetica')
         .fillColor('#000000')
-        .text(p.name || 'Hardware Product', 40, doc.y, { width: 300 })
-        .text(String(item.quantity || 1), 350, doc.y, { width: 50, align: 'center' })
-        .text(`₹${Number(item.price || 0).toLocaleString('en-IN')}`, 420, doc.y, { width: 100, align: 'right' });
+        .text(p.name || item.productName || item.name || 'Hardware Component', 40, doc.y, { width: 300 })
+        .text(String(item.quantity || item.qty || 1), 350, doc.y, { width: 50, align: 'center' })
+        .text(`Rs. ${Number(item.price || 0).toLocaleString('en-IN')}`, 420, doc.y, { width: 100, align: 'right' });
 
       doc.moveDown(0.5);
     });
@@ -109,7 +109,7 @@ export class PdfService {
       .fillColor('#000000')
       .text('GRAND TOTAL:', 350, doc.y, { width: 90 })
       .fillColor('#E2131F')
-      .text(`₹${Number(order.totalAmount || 0).toLocaleString('en-IN')}`, 440, doc.y, { width: 100, align: 'right' });
+      .text(`Rs. ${Number(order.totalAmount || 0).toLocaleString('en-IN')}`, 440, doc.y, { width: 100, align: 'right' });
 
     doc.moveDown(3);
     doc
@@ -119,5 +119,23 @@ export class PdfService {
       .text('Thank you for choosing AlphaaTechh. All custom builds include a 3-Year On-Site Warranty.', { align: 'center' });
 
     return doc;
+  }
+
+  /**
+   * Generate PDF Invoice Buffer for Email Attachments
+   */
+  static generateInvoicePdfBuffer(order: any): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = this.generateInvoicePdf(order);
+        const buffers: Buffer[] = [];
+        doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+        doc.on('error', (err: any) => reject(err));
+        doc.end();
+      } catch (err) {
+        reject(err);
+      }
+    });
   }
 }
