@@ -16,7 +16,7 @@ function getMaskedUrl(url: string): string {
   return url.replace(/(:[^:@]+@)/, ':****@');
 }
 
-console.log(`🔌 [DATABASE DEBUG] Using Connection URL: ${getMaskedUrl(dbUrl)}`);
+console.log(`🔌 [DATABASE DEBUG] Using Connection URL: ${dbUrl}`);
 
 export const prisma = new PrismaClient({
   datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
@@ -25,7 +25,7 @@ export const prisma = new PrismaClient({
 
 export const connectDB = async () => {
   try {
-    console.log(`📡 [Prisma] Attempting connection to: ${getMaskedUrl(dbUrl)}`);
+    console.log(`📡 [Prisma] Attempting connection to: ${dbUrl}`);
     await prisma.$connect();
     console.log('✅ MySQL Database connected successfully via Prisma');
 
@@ -38,6 +38,6 @@ export const connectDB = async () => {
       console.log(`📦 Database loaded with ${productCount} active hardware products.`);
     }
   } catch (error: any) {
-    console.error(`❌ Connection failed for URL [${getMaskedUrl(dbUrl)}]:`, error?.message || error);
+    console.error(`❌ Connection failed for URL [${dbUrl}]:`, error?.message || error);
   }
 };
