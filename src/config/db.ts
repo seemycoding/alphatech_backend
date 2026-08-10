@@ -16,7 +16,7 @@ function getMaskedUrl(url: string): string {
   return url.replace(/(:[^:@]+@)/, ':****@');
 }
 
-console.log(`🔌 [DATABASE DEBUG] Using Connection URL: ${getMaskedUrl(dbUrl)}`);
+console.log(`🔌 [DATABASE DEBUG] Using Connection URL: ${dbUrl}`);
 
 export const prisma = new PrismaClient({
   datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
