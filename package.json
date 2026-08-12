@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "ts-node src/scripts/seedFromExcel.ts",
-    "ingest": "ts-node src/scripts/ingestExcel.ts"
+    "ingest": "ts-node src/scripts/ingestExcel.ts",
+    "map-images": "ts-node src/scripts/mapImagesToProducts.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
