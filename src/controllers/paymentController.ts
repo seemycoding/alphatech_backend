@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import { RazorpayService } from '../services/razorpayService';
 import { prisma } from '../config/db';
+import { ENV } from '../config/env';
 import { AppError } from '../middlewares/errorHandler';
 
 export class PaymentController {
@@ -24,7 +25,17 @@ export class PaymentController {
         data: { razorpayOrderId: razorpayOrder.id }
       });
 
-      res.json({ success: true, data: razorpayOrder });
+      res.json({
+        success: true,
+        data: {
+          id: razorpayOrder.id,
+          orderId: razorpayOrder.id,
+          key: razorpayOrder.key || ENV.RAZORPAY_KEY_ID,
+          amount: razorpayOrder.amount,
+          currency: razorpayOrder.currency,
+          isMock: razorpayOrder.id.startsWith('order_mock_')
+        }
+      });
     } catch (error) {
       next(error);
     }
