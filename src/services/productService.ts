@@ -3,8 +3,10 @@ import { prisma } from '../config/db';
 export class ProductService {
   static async getProducts(query: {
     category?: string;
+    categories?: string;
     categoryId?: string;
     brand?: string;
+    brands?: string;
     socket?: string;
     minPrice?: string;
     maxPrice?: string;
@@ -15,48 +17,76 @@ export class ProductService {
     limit?: string;
   }) {
     const page = Math.max(1, parseInt(query.page || '1'));
-    const limit = Math.max(1, parseInt(query.limit || '50'));
+    const limit = Math.max(1, parseInt(query.limit || '12'));
     const skip = (page - 1) * limit;
 
     const where: any = {};
 
-    // 🎯 Robust Category Filtering (Fully compatible with MySQL and PostgreSQL)
+    // 🎯 Robust Multi-Category Filtering (comma-separated or single)
+    const rawCatStr = query.categories || query.category || '';
     if (query.categoryId && query.categoryId.toLowerCase() !== 'all') {
       where.categoryId = query.categoryId;
-    } else if (query.category && query.category.toLowerCase() !== 'all') {
-      const catSearch = query.category.toLowerCase();
-      let searchTerms: string[] = [catSearch];
+    } else if (rawCatStr && rawCatStr.toLowerCase() !== 'all') {
+      const catList = rawCatStr
+        .split(',')
+        .map((c) => c.trim().toLowerCase())
+        .filter((c) => c && c !== 'all');
 
-      if (catSearch === 'gpu' || catSearch.includes('graphic')) {
-        searchTerms.push('gpu', 'graphics', 'card');
-      } else if (catSearch === 'processor' || catSearch === 'processors' || catSearch === 'cpu') {
-        searchTerms.push('processor', 'processors', 'cpu');
-      } else if (catSearch === 'motherboard' || catSearch === 'motherboards' || catSearch === 'mobo') {
-        searchTerms.push('motherboard', 'motherboards', 'mobo');
-      } else if (catSearch === 'ram' || catSearch.includes('memory')) {
-        searchTerms.push('ram', 'memory');
-      } else if (catSearch === 'storage' || catSearch.includes('ssd') || catSearch.includes('drive')) {
-        searchTerms.push('storage', 'ssd', 'drive', 'nvme');
-      } else if (catSearch === 'psu' || catSearch.includes('power')) {
-        searchTerms.push('psu', 'power', 'supply');
+      if (catList.length > 0) {
+        const catOrConditions: any[] = [];
+        for (const catSearch of catList) {
+          let searchTerms: string[] = [catSearch];
+          if (catSearch === 'gpu' || catSearch.includes('graphic')) {
+            searchTerms.push('gpu', 'graphics', 'card');
+          } else if (catSearch === 'processor' || catSearch === 'processors' || catSearch === 'cpu') {
+            searchTerms.push('processor', 'processors', 'cpu');
+          } else if (catSearch === 'motherboard' || catSearch === 'motherboards' || catSearch === 'mobo') {
+            searchTerms.push('motherboard', 'motherboards', 'mobo');
+          } else if (catSearch === 'ram' || catSearch.includes('memory')) {
+            searchTerms.push('ram', 'memory');
+          } else if (catSearch === 'storage' || catSearch.includes('ssd') || catSearch.includes('drive')) {
+            searchTerms.push('storage', 'ssd', 'drive', 'nvme');
+          } else if (catSearch === 'psu' || catSearch.includes('power')) {
+            searchTerms.push('psu', 'power', 'supply');
+          }
+
+          for (const term of searchTerms) {
+            catOrConditions.push(
+              { categoryId: term },
+              { category: { slug: { contains: term } } },
+              { category: { name: { contains: term } } }
+            );
+          }
+        }
+
+        where.OR = where.OR ? [...where.OR, ...catOrConditions] : catOrConditions;
       }
-
-      where.category = {
-        OR: searchTerms.flatMap((term) => [
-          { id: term },
-          { slug: { contains: term } },
-          { name: { contains: term } }
-        ])
-      };
     }
 
-    if (query.brand) {
-      where.brand = {
-        OR: [
-          { slug: { contains: query.brand.toLowerCase() } },
-          { name: { contains: query.brand } }
-        ]
-      };
+    // 🎯 Robust Multi-Brand Filtering (comma-separated or single)
+    const rawBrandStr = query.brands || query.brand || '';
+    if (rawBrandStr && rawBrandStr.toLowerCase() !== 'all') {
+      const brandList = rawBrandStr
+        .split(',')
+        .map((b) => b.trim().toLowerCase())
+        .filter((b) => b && b !== 'all');
+
+      if (brandList.length > 0) {
+        const brandOrConditions: any[] = [];
+        for (const brandSearch of brandList) {
+          brandOrConditions.push(
+            { brand: { slug: { contains: brandSearch } } },
+            { brand: { name: { contains: brandSearch } } }
+          );
+        }
+
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: brandOrConditions }];
+          delete where.OR;
+        } else {
+          where.OR = brandOrConditions;
+        }
+      }
     }
 
     if (query.socket) {
@@ -74,13 +104,22 @@ export class ProductService {
     }
 
     if (query.search) {
-      where.OR = [
+      const searchOr = [
         { name: { contains: query.search } },
         { sku: { contains: query.search } },
         { description: { contains: query.search } },
         { brand: { name: { contains: query.search } } },
         { category: { name: { contains: query.search } } }
       ];
+
+      if (where.AND) {
+        where.AND.push({ OR: searchOr });
+      } else if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchOr }];
+        delete where.OR;
+      } else {
+        where.OR = searchOr;
+      }
     }
 
     let orderBy: any = { createdAt: 'desc' };
@@ -92,7 +131,6 @@ export class ProductService {
       orderBy = { stockQuantity: 'desc' };
     }
 
-    // 🎯 Sequential query execution to eliminate transaction/batching locks
     const products = await prisma.product.findMany({
       where,
       skip,
@@ -108,6 +146,7 @@ export class ProductService {
 
     return {
       products,
+      data: products,
       pagination: {
         page,
         limit,
