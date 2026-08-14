@@ -30,6 +30,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum CouponType {
+  PERCENTAGE
+  FLAT
+}
+
 model User {
   id              String            @id @default(uuid())
   email           String            @unique
@@ -194,4 +199,46 @@ model OtpVerification {
   createdAt DateTime @default(now())
 
   @@index([email, type])
+}
+
+// 🎟️ Promo Coupons Engine
+model Coupon {
+  id              String      @id @default(uuid())
+  code            String      @unique
+  type            CouponType  @default(PERCENTAGE)
+  value           Decimal     @db.Decimal(10, 2)
+  minOrderAmount  Decimal?    @db.Decimal(10, 2)
+  maxDiscount     Decimal?    @db.Decimal(10, 2)
+  usageLimit      Int?
+  usedCount       Int         @default(0)
+  expiresAt       DateTime?
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+// 📢 Promotional Offers & Flash Banners
+model Offer {
+  id               String      @id @default(uuid())
+  title            String
+  bannerText       String
+  discountType     CouponType?
+  discountValue    Decimal?    @db.Decimal(10, 2)
+  targetCategoryId String?
+  bannerImageUrl   String?
+  isFlashBanner    Boolean     @default(false)
+  startDate        DateTime?
+  endDate          DateTime?
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+// ⚙️ Dynamic Site Settings (Margin Markups % & Warranty Text)
+model SiteSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updatedAt   DateTime @updatedAt
 }

@@ -16,7 +16,15 @@ app.use(
 
 app.use(
   cors({
-    origin: [ENV.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'],
+    origin: [
+      ENV.FRONTEND_URL,
+      'https://alphaatechh.com',
+      'https://www.alphaatechh.com',
+      'https://admin.alphaatechh.com',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:3000'
+    ]
   })
 );
 

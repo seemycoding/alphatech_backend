@@ -8,6 +8,7 @@ import wishlistRoutes from './wishlistRoutes';
 import userRoutes from './userRoutes';
 import adminRoutes from './adminRoutes';
 import contactRoutes from './contactRoutes';
+import settingRoutes from './settingRoutes';
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use('/users', userRoutes);
 router.use('/user', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/contact', contactRoutes);
+router.use('/settings', settingRoutes);
 
 export default router;

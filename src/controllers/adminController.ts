@@ -1,143 +1,472 @@
-import { Response, NextFunction } from 'express';
-import { AuthRequest } from '../types';
+import { Request, Response } from 'express';
 import { prisma } from '../config/db';
-import { OrderService } from '../services/orderService';
-import { ingestExcelFile } from '../scripts/ingestExcel';
 
 export class AdminController {
-  static async getDashboardStats(req: AuthRequest, res: Response, next: NextFunction) {
+  // 1. Dashboard Analytics & Summary Stats
+  static async getDashboardStats(req: Request, res: Response) {
     try {
-      const [totalOrders, totalRevenue, pendingAssembly, lowStockProducts] = await Promise.all([
-        prisma.order.count(),
-        prisma.order.aggregate({
-          where: { paymentStatus: 'PAID' },
-          _sum: { totalAmount: true }
-        }),
-        prisma.order.count({
-          where: { orderStatus: 'PRECISION_ASSEMBLY' }
-        }),
-        prisma.product.count({
-          where: { stockQuantity: { lte: 3 } }
-        })
-      ]);
+      const [totalOrders, totalProducts, totalCustomers, lowStockCount, paidOrders, recentOrders] =
+        await Promise.all([
+          prisma.order.count(),
+          prisma.product.count(),
+          prisma.user.count({ where: { role: 'CUSTOMER' } }),
+          prisma.product.count({ where: { stockQuantity: { lte: 5 } } }),
+          prisma.order.aggregate({
+            where: { paymentStatus: 'PAID' },
+            _sum: { totalAmount: true }
+          }),
+          prisma.order.findMany({
+            take: 5,
+            orderBy: { createdAt: 'desc' },
+            include: {
+              items: { include: { product: true } }
+            }
+          })
+        ]);
+
+      const totalRevenue = Number(paidOrders._sum.totalAmount || 0);
 
       res.json({
         success: true,
         data: {
+          totalRevenue,
+          formattedTotalRevenue: `₹${totalRevenue.toLocaleString('en-IN')}`,
           totalOrders,
-          totalRevenue: totalRevenue._sum.totalAmount || 0,
-          pendingAssembly,
-          lowStockProducts
+          totalProducts,
+          totalCustomers,
+          lowStockCount,
+          recentOrders
         }
       });
-    } catch (error) {
-      next(error);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  static async getAdminOrders(req: AuthRequest, res: Response, next: NextFunction) {
+  // 2. Product Management (CRUD)
+  static async getProducts(req: Request, res: Response) {
     try {
-      const orders = await prisma.order.findMany({
-        orderBy: { createdAt: 'desc' },
-        include: { items: { include: { product: true } } }
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const search = (req.query.search as string) || '';
+      const categoryId = req.query.categoryId as string;
+      const skip = (page - 1) * limit;
+
+      const where: any = {};
+      if (search) {
+        where.OR = [
+          { name: { contains: search } },
+          { sku: { contains: search } },
+          { socket: { contains: search } }
+        ];
+      }
+      if (categoryId && categoryId !== 'all') {
+        where.categoryId = categoryId;
+      }
+
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: { category: true, brand: true }
+        }),
+        prisma.product.count({ where })
+      ]);
+
+      res.json({
+        success: true,
+        data: products,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
       });
-
-      res.json({ success: true, data: orders });
-    } catch (error) {
-      next(error);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  static async updateOrderStatus(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const { orderId } = req.params as { orderId: string };
-      const { status } = req.body;
-
-      const order = await OrderService.updateOrderStatus(orderId, status);
-      res.json({ success: true, message: `Order status updated to ${status}`, data: order });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  static async createProduct(req: AuthRequest, res: Response, next: NextFunction) {
+  static async createProduct(req: Request, res: Response) {
     try {
       const {
         name,
         sku,
         price,
-        categoryName,
-        brandName,
+        originalPrice,
+        categoryId,
+        brandId,
         socket,
-        series,
-        hasIntegratedGpu,
+        ramType,
+        formFactor,
         tdp,
+        stockQuantity,
         imageUrl,
-        specifications,
-        features
+        description,
+        specifications
       } = req.body;
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-
-      const category = await prisma.category.upsert({
-        where: { name: categoryName || 'Processor' },
-        update: {},
-        create: {
-          name: categoryName || 'Processor',
-          slug: (categoryName || 'Processor').toLowerCase().replace(/[^a-z0-9]+/g, '-')
-        }
-      });
-
-      const brand = await prisma.brand.upsert({
-        where: { name: brandName || 'AMD' },
-        update: {},
-        create: {
-          name: brandName || 'AMD',
-          slug: (brandName || 'AMD').toLowerCase().replace(/[^a-z0-9]+/g, '-')
-        }
-      });
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
+      const generatedSku = sku || 'SKU-' + Date.now();
 
       const product = await prisma.product.create({
         data: {
           name,
-          sku,
+          sku: generatedSku,
           slug,
-          price,
-          categoryId: category.id,
-          brandId: brand.id,
-          socket,
-          series,
-          hasIntegratedGpu: !!hasIntegratedGpu,
-          tdp,
-          imageUrl: imageUrl || 'https://images.pexels.com/photos/11272008/pexels-photo-11272008.jpeg',
-          specifications: specifications || [],
-          features: features || []
-        }
+          price: parseFloat(price),
+          originalPrice: originalPrice ? parseFloat(originalPrice) : null,
+          categoryId,
+          brandId,
+          socket: socket || null,
+          ramType: ramType || null,
+          formFactor: formFactor || null,
+          tdp: tdp ? parseInt(tdp) : null,
+          stockQuantity: stockQuantity ? parseInt(stockQuantity) : 10,
+          imageUrl: imageUrl || '/uploads/products_images/sample.jpg',
+          description: description || '',
+          specifications: specifications || []
+        },
+        include: { category: true, brand: true }
       });
 
-      res.status(201).json({ success: true, data: product });
-    } catch (error) {
-      next(error);
+      res.status(201).json({ success: true, data: product, message: 'Product created successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * Excel File Upload Data Ingestion Endpoint
-   */
-  static async uploadAndIngestExcel(req: AuthRequest, res: Response, next: NextFunction) {
+  static async updateProduct(req: Request, res: Response) {
     try {
-      if (!req.file) {
-        return res.status(400).json({ success: false, error: 'No Excel or CSV file uploaded.' });
+      const id = req.params.id as string;
+      const data = { ...req.body };
+
+      if (data.price) data.price = parseFloat(data.price);
+      if (data.originalPrice) data.originalPrice = parseFloat(data.originalPrice);
+      if (data.stockQuantity) data.stockQuantity = parseInt(data.stockQuantity);
+      if (data.tdp) data.tdp = parseInt(data.tdp);
+
+      const product = await prisma.product.update({
+        where: { id },
+        data,
+        include: { category: true, brand: true }
+      });
+
+      res.json({ success: true, data: product, message: 'Product updated successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteProduct(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      await prisma.product.delete({ where: { id } });
+      res.json({ success: true, message: 'Product deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 3. Category Management (CRUD)
+  static async getCategories(req: Request, res: Response) {
+    try {
+      const categories = await prisma.category.findMany({
+        orderBy: { name: 'asc' },
+        include: { _count: { select: { products: true } } }
+      });
+      res.json({ success: true, data: categories });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async createCategory(req: Request, res: Response) {
+    try {
+      const { name } = req.body;
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const category = await prisma.category.create({
+        data: { name, slug }
+      });
+      res.status(201).json({ success: true, data: category, message: 'Category created successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateCategory(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { name } = req.body;
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const category = await prisma.category.update({
+        where: { id },
+        data: { name, slug }
+      });
+      res.json({ success: true, data: category, message: 'Category updated successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteCategory(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      await prisma.category.delete({ where: { id } });
+      res.json({ success: true, message: 'Category deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 4. Users Registry List
+  static async getUsers(req: Request, res: Response) {
+    try {
+      const users = await prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          company: true,
+          role: true,
+          createdAt: true,
+          _count: { select: { orders: true } }
+        }
+      });
+      res.json({ success: true, data: users });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 5. Order Management & Stage Updates (ORDER_RECEIVED -> PRECISION_ASSEMBLY -> STRESS_TESTING -> SHIPPED -> DELIVERED)
+  static async getOrders(req: Request, res: Response) {
+    try {
+      const status = req.query.status as string;
+      const where: any = {};
+      if (status && status !== 'all') {
+        where.orderStatus = status;
       }
 
-      const count = await ingestExcelFile(req.file.path);
-      res.json({
-        success: true,
-        message: `Successfully ingested ${count} hardware products from uploaded Excel file!`,
-        count
+      const orders = await prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: { include: { product: true } }
+        }
       });
-    } catch (error) {
-      next(error);
+      res.json({ success: true, data: orders });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateOrderStatus(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { orderStatus, paymentStatus } = req.body;
+
+      const updateData: any = {};
+      if (orderStatus) updateData.orderStatus = orderStatus;
+      if (paymentStatus) updateData.paymentStatus = paymentStatus;
+
+      const order = await prisma.order.update({
+        where: { id },
+        data: updateData,
+        include: { items: { include: { product: true } } }
+      });
+
+      res.json({ success: true, data: order, message: `Order updated to ${order.orderStatus}` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 6. Payments Tracking List
+  static async getPayments(req: Request, res: Response) {
+    try {
+      const orders = await prisma.order.findMany({
+        where: {
+          OR: [{ razorpayPaymentId: { not: null } }, { paymentMethod: 'COD' }]
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          orderNumber: true,
+          customerName: true,
+          customerEmail: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          totalAmount: true,
+          razorpayPaymentId: true,
+          razorpayOrderId: true,
+          createdAt: true
+        }
+      });
+
+      res.json({ success: true, data: orders });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 7. Coupon Management (CRUD)
+  static async getCoupons(req: Request, res: Response) {
+    try {
+      const coupons = await prisma.coupon.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      res.json({ success: true, data: coupons });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async createCoupon(req: Request, res: Response) {
+    try {
+      const { code, type, value, minOrderAmount, maxDiscount, usageLimit, expiresAt } = req.body;
+      const coupon = await prisma.coupon.create({
+        data: {
+          code: code.toUpperCase(),
+          type: type || 'PERCENTAGE',
+          value: parseFloat(value),
+          minOrderAmount: minOrderAmount ? parseFloat(minOrderAmount) : null,
+          maxDiscount: maxDiscount ? parseFloat(maxDiscount) : null,
+          usageLimit: usageLimit ? parseInt(usageLimit) : null,
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+          isActive: true
+        }
+      });
+      res.status(201).json({ success: true, data: coupon, message: 'Coupon created successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateCoupon(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const coupon = await prisma.coupon.update({
+        where: { id },
+        data: req.body
+      });
+      res.json({ success: true, data: coupon, message: 'Coupon updated successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteCoupon(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      await prisma.coupon.delete({ where: { id } });
+      res.json({ success: true, message: 'Coupon deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 8. Offers & Flash Banners (CRUD)
+  static async getOffers(req: Request, res: Response) {
+    try {
+      const offers = await prisma.offer.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      res.json({ success: true, data: offers });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async createOffer(req: Request, res: Response) {
+    try {
+      const { title, bannerText, isFlashBanner, discountType, discountValue, bannerImageUrl, isActive } = req.body;
+
+      if (isFlashBanner) {
+        await prisma.offer.updateMany({
+          where: { isFlashBanner: true },
+          data: { isFlashBanner: false }
+        });
+      }
+
+      const offer = await prisma.offer.create({
+        data: {
+          title,
+          bannerText,
+          isFlashBanner: !!isFlashBanner,
+          discountType: discountType || null,
+          discountValue: discountValue ? parseFloat(discountValue) : null,
+          bannerImageUrl: bannerImageUrl || null,
+          isActive: isActive !== undefined ? isActive : true
+        }
+      });
+      res.status(201).json({ success: true, data: offer, message: 'Offer banner created successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateOffer(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      if (req.body.isFlashBanner) {
+        await prisma.offer.updateMany({
+          where: { id: { not: id }, isFlashBanner: true },
+          data: { isFlashBanner: false }
+        });
+      }
+      const offer = await prisma.offer.update({
+        where: { id },
+        data: req.body
+      });
+      res.json({ success: true, data: offer, message: 'Offer updated successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteOffer(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      await prisma.offer.delete({ where: { id } });
+      res.json({ success: true, message: 'Offer deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 9. Site Settings (Margin % & Build Assurance Text)
+  static async getSettings(req: Request, res: Response) {
+    try {
+      const settings = await prisma.siteSetting.findMany();
+      const settingsMap: Record<string, string> = {};
+      settings.forEach((s) => {
+        settingsMap[s.key] = s.value;
+      });
+      res.json({ success: true, data: settingsMap });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateSettings(req: Request, res: Response) {
+    try {
+      const settingsObj: Record<string, string> = req.body;
+      for (const [key, value] of Object.entries(settingsObj)) {
+        await prisma.siteSetting.upsert({
+          where: { key },
+          update: { value: String(value) },
+          create: { key, value: String(value) }
+        });
+      }
+      res.json({ success: true, message: 'Site settings updated successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
 }
