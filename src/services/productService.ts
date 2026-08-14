@@ -122,11 +122,11 @@ export class ProductService {
       }
     }
 
-    let orderBy: any = { createdAt: 'desc' };
-    if (query.sortBy === 'price-low') {
-      orderBy = { price: 'asc' };
-    } else if (query.sortBy === 'price-high') {
+    let orderBy: any = { price: 'asc' };
+    if (query.sortBy === 'price-high') {
       orderBy = { price: 'desc' };
+    } else if (query.sortBy === 'newest') {
+      orderBy = { createdAt: 'desc' };
     } else if (query.sortBy === 'popular') {
       orderBy = { stockQuantity: 'desc' };
     }

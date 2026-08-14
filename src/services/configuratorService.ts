@@ -1,6 +1,37 @@
 import { prisma } from '../config/db';
 import { ConfiguratorCheckPayload } from '../types';
 
+function getProductSocket(p: any): string | null {
+  if (p.socket) return p.socket;
+  const fullText = `${p.name} ${JSON.stringify(p.specifications || [])}`;
+  if (/\bAM5\b/i.test(fullText)) return 'AM5';
+  if (/\bAM4\b/i.test(fullText)) return 'AM4';
+  if (/\b(LGA1851|LGA-1851|1851)\b/i.test(fullText)) return 'LGA1851';
+  if (/\b(LGA1700|LGA-1700|1700)\b/i.test(fullText)) return 'LGA1700';
+  if (/\b(LGA1200|LGA-1200|1200)\b/i.test(fullText)) return 'LGA1200';
+  if (/\b(LGA1151|LGA-1151|1151)\b/i.test(fullText)) return 'LGA1151';
+  return null;
+}
+
+function getProductRamType(p: any): string | null {
+  if (p.ramType) return p.ramType;
+  const fullText = `${p.name} ${JSON.stringify(p.specifications || [])}`;
+  if (/\bDDR5\b/i.test(fullText)) return 'DDR5';
+  if (/\bDDR4\b/i.test(fullText)) return 'DDR4';
+  if (/\bDDR3\b/i.test(fullText)) return 'DDR3';
+  return null;
+}
+
+function getProductFormFactor(p: any): string | null {
+  if (p.formFactor) return p.formFactor;
+  const fullText = `${p.name} ${JSON.stringify(p.specifications || [])}`;
+  if (/\b(E-ATX|EATX)\b/i.test(fullText)) return 'E-ATX';
+  if (/\b(Micro-ATX|m-ATX|mATX|Micro ATX)\b/i.test(fullText)) return 'Micro-ATX';
+  if (/\b(Mini-ITX|Mini ITX|ITX)\b/i.test(fullText)) return 'Mini-ITX';
+  if (/\bATX\b/i.test(fullText)) return 'ATX';
+  return null;
+}
+
 export class ConfiguratorService {
   static async getConfiguratorOptions() {
     const products = await prisma.product.findMany({
@@ -21,17 +52,21 @@ export class ConfiguratorService {
 
     products.forEach((p) => {
       const catSlug = p.category.slug.toLowerCase();
+      const socket = getProductSocket(p);
+      const ramType = getProductRamType(p);
+      const formFactor = getProductFormFactor(p);
+
       const option = {
         id: p.id,
         name: p.name,
         brand: p.brand.name,
         price: Number(p.price),
         formattedPrice: `₹${Number(p.price).toLocaleString('en-IN')}`,
-        socket: p.socket,
+        socket,
         tdp: p.tdp || 65,
         hasIntegratedGpu: p.hasIntegratedGpu,
-        ramType: p.ramType,
-        formFactor: p.formFactor,
+        ramType,
+        formFactor,
         image: p.imageUrl,
         specs: p.specifications
       };
@@ -90,20 +125,26 @@ export class ConfiguratorService {
     const errors: string[] = [];
 
     if (partMap.processor && partMap.motherboard) {
-      if (partMap.processor.socket && partMap.motherboard.socket) {
-        if (partMap.processor.socket.toUpperCase() !== partMap.motherboard.socket.toUpperCase()) {
+      const cpuSocket = getProductSocket(partMap.processor);
+      const moboSocket = getProductSocket(partMap.motherboard);
+
+      if (cpuSocket && moboSocket) {
+        if (cpuSocket.toUpperCase() !== moboSocket.toUpperCase()) {
           errors.push(
-            `Socket Mismatch: Selected CPU uses socket ${partMap.processor.socket}, but Motherboard uses socket ${partMap.motherboard.socket}.`
+            `Socket Mismatch: Selected CPU uses socket ${cpuSocket}, but Motherboard uses socket ${moboSocket}.`
           );
         }
       }
     }
 
     if (partMap.ram && partMap.motherboard) {
-      if (partMap.ram.ramType && partMap.motherboard.ramType) {
-        if (partMap.ram.ramType.toUpperCase() !== partMap.motherboard.ramType.toUpperCase()) {
+      const ramType = getProductRamType(partMap.ram);
+      const moboRamType = getProductRamType(partMap.motherboard);
+
+      if (ramType && moboRamType) {
+        if (ramType.toUpperCase() !== moboRamType.toUpperCase()) {
           errors.push(
-            `RAM Type Incompatibility: Selected RAM is ${partMap.ram.ramType}, but Motherboard supports ${partMap.motherboard.ramType} only.`
+            `RAM Type Incompatibility: Selected RAM is ${ramType}, but Motherboard supports ${moboRamType} only.`
           );
         }
       }
@@ -125,10 +166,10 @@ export class ConfiguratorService {
     }
 
     if (partMap.motherboard && partMap.case) {
-      if (
-        partMap.motherboard.formFactor === 'ATX' &&
-        partMap.case.formFactor === 'Micro-ATX'
-      ) {
+      const moboForm = getProductFormFactor(partMap.motherboard);
+      const caseForm = getProductFormFactor(partMap.case);
+
+      if (moboForm === 'ATX' && caseForm === 'Micro-ATX') {
         errors.push(
           `Physical Clearance Error: ATX Motherboard cannot physically fit inside Micro-ATX Cabinet.`
         );
