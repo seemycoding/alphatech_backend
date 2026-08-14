@@ -5,14 +5,16 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",
-    "build": "prisma generate && tsc && npm run map-images",
+    "build": "prisma generate && tsc && npm run enrichProduct",
     "postinstall": "prisma generate",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "ts-node src/scripts/seedFromExcel.ts",
     "ingest": "ts-node src/scripts/ingestExcel.ts",
-    "map-images": "ts-node src/scripts/mapImagesToProducts.ts"
+    "map-images": "ts-node src/scripts/mapImagesToProducts.ts",
+    "enrichProduct":"ts-node src/scripts/enrichProductMetadata.ts"
+
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
