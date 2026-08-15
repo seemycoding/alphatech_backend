@@ -77,12 +77,20 @@ export class SettingController {
         discountAmount = Number(coupon.value);
       }
 
+      const finalDiscount = Math.round(discountAmount);
+
       res.json({
         success: true,
+        coupon: {
+          code: coupon.code,
+          type: coupon.type,
+          value: Number(coupon.value)
+        },
+        discountAmount: finalDiscount,
         data: {
           code: coupon.code,
-          discountAmount,
-          formattedDiscountAmount: `₹${discountAmount.toLocaleString('en-IN')}`,
+          discountAmount: finalDiscount,
+          formattedDiscountAmount: `₹${finalDiscount.toLocaleString('en-IN')}`,
           type: coupon.type,
           value: Number(coupon.value)
         },
