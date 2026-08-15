@@ -5,8 +5,41 @@ import { prisma } from '../config/db';
 import { ENV } from '../config/env';
 import { Msg91Service } from '../services/msg91Service';
 import { AppError } from '../middlewares/errorHandler';
+import { AuthRequest } from '../types';
 
 export class AuthController {
+  /**
+   * Get Current Authenticated User telemetries / profile
+   */
+  static async getMe(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return next(new AppError('Unauthorized', 401));
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          phone: true,
+          company: true,
+          role: true,
+          createdAt: true
+        }
+      });
+
+      if (!user) return next(new AppError('User account not found', 404));
+
+      res.json({
+        success: true,
+        user,
+        data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
   /**
    * Request MSG91 Email OTP for New Account Registration
    */

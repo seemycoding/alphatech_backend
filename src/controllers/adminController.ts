@@ -1,7 +1,30 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../config/db';
 
 export class AdminController {
+  // Upload Product Image into Category Subfolder
+  static async uploadProductImage(req: Request, res: Response) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: 'No image file provided' });
+      }
+
+      const relPath = req.file.path.replace(/\\/g, '/');
+      const uploadsIndex = relPath.indexOf('uploads/');
+      const webPath = uploadsIndex !== -1 ? '/' + relPath.substring(uploadsIndex) : '/' + relPath;
+
+      res.json({
+        success: true,
+        imageUrl: webPath,
+        message: 'Product image uploaded successfully'
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
   // 1. Dashboard Analytics & Summary Stats
   static async getDashboardStats(req: Request, res: Response) {
     try {
@@ -90,6 +113,15 @@ export class AdminController {
     }
   }
 
+  static async getBrands(req: Request, res: Response) {
+    try {
+      const brands = await prisma.brand.findMany({ orderBy: { name: 'asc' } });
+      res.json({ success: true, data: brands });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
   static async createProduct(req: Request, res: Response) {
     try {
       const {
@@ -109,18 +141,52 @@ export class AdminController {
         specifications
       } = req.body;
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
-      const generatedSku = sku || 'SKU-' + Date.now();
+      let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
+      const existingSlugProduct = await prisma.product.findUnique({ where: { slug } });
+      if (existingSlugProduct) {
+        slug = `${slug}-${Math.floor(100 + Math.random() * 900)}`;
+      }
+
+      let finalSku = (sku && typeof sku === 'string' && sku.trim().length > 0)
+        ? sku.trim()
+        : `SKU-${Date.now()}`;
+
+      const existingSkuProduct = await prisma.product.findUnique({ where: { sku: finalSku } });
+      if (existingSkuProduct) {
+        return res.status(400).json({
+          success: false,
+          message: `This SKU ("${finalSku}") is already saved in the database. Please cross verify.`
+        });
+      }
+
+      // Ensure brandId is a valid foreign key in the database
+      let validBrandId = brandId;
+      if (validBrandId) {
+        const brandExists = await prisma.brand.findUnique({ where: { id: validBrandId } });
+        if (!brandExists) validBrandId = null;
+      }
+
+      if (!validBrandId) {
+        const fallbackBrand = await prisma.brand.findFirst();
+        if (fallbackBrand) {
+          validBrandId = fallbackBrand.id;
+        } else {
+          const createdBrand = await prisma.brand.create({
+            data: { name: 'Generic', slug: 'generic' }
+          });
+          validBrandId = createdBrand.id;
+        }
+      }
 
       const product = await prisma.product.create({
         data: {
           name,
-          sku: generatedSku,
+          sku: finalSku,
           slug,
           price: parseFloat(price),
           originalPrice: originalPrice ? parseFloat(originalPrice) : null,
           categoryId,
-          brandId,
+          brandId: validBrandId,
           socket: socket || null,
           ramType: ramType || null,
           formFactor: formFactor || null,
@@ -143,6 +209,23 @@ export class AdminController {
     try {
       const id = req.params.id as string;
       const data = { ...req.body };
+
+      if (data.sku && typeof data.sku === 'string' && data.sku.trim() !== '') {
+        const trimmedSku = data.sku.trim();
+        const existingSku = await prisma.product.findFirst({
+          where: {
+            sku: trimmedSku,
+            id: { not: id }
+          }
+        });
+        if (existingSku) {
+          return res.status(400).json({
+            success: false,
+            message: `This SKU ("${trimmedSku}") is already saved in the database. Please cross verify.`
+          });
+        }
+        data.sku = trimmedSku;
+      }
 
       if (data.price) data.price = parseFloat(data.price);
       if (data.originalPrice) data.originalPrice = parseFloat(data.originalPrice);
@@ -187,10 +270,23 @@ export class AdminController {
   static async createCategory(req: Request, res: Response) {
     try {
       const { name } = req.body;
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      if (!name || typeof name !== 'string' || name.trim() === '') {
+        return res.status(400).json({ success: false, message: 'Category name is required' });
+      }
+
+      const cleanName = name.trim();
+      const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
       const category = await prisma.category.create({
-        data: { name, slug }
+        data: { name: cleanName, slug }
       });
+
+      // Auto-create corresponding image directory in uploads/products_images/
+      const categoryDir = path.resolve(process.cwd(), 'uploads/products_images', cleanName);
+      if (!fs.existsSync(categoryDir)) {
+        fs.mkdirSync(categoryDir, { recursive: true });
+      }
+
       res.status(201).json({ success: true, data: category, message: 'Category created successfully' });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
