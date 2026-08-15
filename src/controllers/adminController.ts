@@ -560,7 +560,43 @@ export class AdminController {
           create: { key, value: String(value) }
         });
       }
-      res.json({ success: true, message: 'Site settings updated successfully' });
+      res.json({ success: true, message: 'Settings updated successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 10. Contact Inquiries Management
+  static async getInquiries(req: Request, res: Response) {
+    try {
+      const inquiries = await prisma.contactMessage.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      res.json({ success: true, data: inquiries });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateInquiryStatus(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { status } = req.body;
+      const inquiry = await prisma.contactMessage.update({
+        where: { id },
+        data: { status }
+      });
+      res.json({ success: true, data: inquiry, message: 'Inquiry status updated' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteInquiry(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      await prisma.contactMessage.delete({ where: { id } });
+      res.json({ success: true, message: 'Inquiry deleted successfully' });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }

@@ -242,3 +242,15 @@ model SiteSetting {
   description String?
   updatedAt   DateTime @updatedAt
 }
+
+// 📩 Customer Contact Inquiries
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String   @db.Text
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+}

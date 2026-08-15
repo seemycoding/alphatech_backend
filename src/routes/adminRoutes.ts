@@ -185,4 +185,9 @@ router.delete('/offers/:id', AdminController.deleteOffer);
 router.get('/settings', AdminController.getSettings);
 router.put('/settings', AdminController.updateSettings);
 
+// Contact Inquiries
+router.get('/inquiries', AdminController.getInquiries);
+router.put('/inquiries/:id/status', AdminController.updateInquiryStatus);
+router.delete('/inquiries/:id', AdminController.deleteInquiry);
+
 export default router;
