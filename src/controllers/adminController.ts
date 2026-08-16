@@ -601,4 +601,26 @@ export class AdminController {
       res.status(500).json({ success: false, message: err.message });
     }
   }
+
+  // 11. Newsletter Subscribers Management
+  static async getSubscribers(req: Request, res: Response) {
+    try {
+      const subscribers = await prisma.newsletterSubscription.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      res.json({ success: true, data: subscribers });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteSubscriber(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      await prisma.newsletterSubscription.delete({ where: { id } });
+      res.json({ success: true, message: 'Subscriber deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
 }

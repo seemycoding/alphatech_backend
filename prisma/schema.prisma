@@ -254,3 +254,11 @@ model ContactMessage {
   status    String   @default("NEW")
   createdAt DateTime @default(now())
 }
+
+// 📬 Newsletter Subscriptions
+model NewsletterSubscription {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

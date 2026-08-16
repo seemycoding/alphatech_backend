@@ -9,6 +9,7 @@ import userRoutes from './userRoutes';
 import adminRoutes from './adminRoutes';
 import contactRoutes from './contactRoutes';
 import settingRoutes from './settingRoutes';
+import newsletterRoutes from './newsletterRoutes';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/user', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/contact', contactRoutes);
 router.use('/settings', settingRoutes);
+router.use('/newsletter', newsletterRoutes);
 
 export default router;

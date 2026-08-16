@@ -190,4 +190,8 @@ router.get('/inquiries', AdminController.getInquiries);
 router.put('/inquiries/:id/status', AdminController.updateInquiryStatus);
 router.delete('/inquiries/:id', AdminController.deleteInquiry);
 
+// Newsletter Subscribers
+router.get('/subscribers', AdminController.getSubscribers);
+router.delete('/subscribers/:id', AdminController.deleteSubscriber);
+
 export default router;

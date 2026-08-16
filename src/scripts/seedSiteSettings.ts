@@ -7,12 +7,7 @@ export async function seedSiteSettings() {
     {
       key: 'product_markup_percent',
       value: '15',
-      description: 'Crossed-out price markup percentage for individual shop products (e.g. 15%)'
-    },
-    {
-      key: 'build_markup_percent',
-      value: '35',
-      description: 'Crossed-out price markup percentage for custom 3D PC builds (e.g. 35%)'
+      description: 'Crossed-out price markup percentage for shop products and custom PC builds'
     },
     {
       key: 'build_warranty_text',
