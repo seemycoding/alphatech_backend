@@ -13,7 +13,13 @@ export async function seedSiteSettings() {
       key: 'build_warranty_text',
       value: 'Your build includes 3 years of technical support, 1 year on-site warranty, and pre-delivery stress testing (Prime95 + Furmark).',
       description: 'Build assurance and warranty text displayed on the /build configurator page'
-    }
+    },
+    { key: 'payment_credit_card_enabled', value: 'true', description: 'Enable/Disable Credit Card payment method' },
+    { key: 'payment_debit_card_enabled', value: 'false', description: 'Enable/Disable Debit Card payment method' },
+    { key: 'payment_upi_enabled', value: 'true', description: 'Enable/Disable UPI & QR Code payment method' },
+    { key: 'payment_netbanking_enabled', value: 'true', description: 'Enable/Disable Net Banking payment method' },
+    { key: 'payment_emi_enabled', value: 'true', description: 'Enable/Disable EMI Options payment method' },
+    { key: 'payment_wallets_enabled', value: 'true', description: 'Enable/Disable Digital Wallets payment method' }
   ];
 
   for (const s of defaultSettings) {

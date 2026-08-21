@@ -540,7 +540,17 @@ export class AdminController {
   static async getSettings(req: Request, res: Response) {
     try {
       const settings = await prisma.siteSetting.findMany();
-      const settingsMap: Record<string, string> = {};
+      const defaults: Record<string, string> = {
+        product_markup_percent: '15',
+        build_warranty_text: 'Your build includes 3 years of technical support, 1 year on-site warranty, and pre-delivery stress testing (Prime95 + Furmark).',
+        payment_credit_card_enabled: 'true',
+        payment_debit_card_enabled: 'false',
+        payment_upi_enabled: 'true',
+        payment_netbanking_enabled: 'true',
+        payment_emi_enabled: 'true',
+        payment_wallets_enabled: 'true'
+      };
+      const settingsMap: Record<string, string> = { ...defaults };
       settings.forEach((s) => {
         settingsMap[s.key] = s.value;
       });
